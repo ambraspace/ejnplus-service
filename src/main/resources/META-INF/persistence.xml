@@ -1,0 +1,38 @@
+<persistence xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence
+             http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd"
+             version="2.1">
+
+    <persistence-unit name="default">
+
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+
+        <class>com.ambraspace.ejnplus.CPVCode</class>
+        <class>com.ambraspace.ejnplus.Announcement</class>
+        <class>com.ambraspace.ejnplus.User</class>
+
+        <properties>
+            <property name="javax.persistence.jdbc.driver"
+                      value="org.mariadb.jdbc.Driver" />
+
+            <property name="javax.persistence.jdbc.url"
+                      value="jdbc:mysql://localhost/ejnplus" />
+
+            <property name="javax.persistence.jdbc.user"
+                      value="ambra" />
+
+            <property name="javax.persistence.jdbc.password"
+                      value="" />
+
+            <property name="hibernate.show_sql"
+                      value="true" />
+
+            <property name="hibernate.hbm2ddl.auto"
+                      value="update" />
+        </properties>
+
+    </persistence-unit>
+
+</persistence>
+
