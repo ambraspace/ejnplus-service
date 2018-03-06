@@ -399,22 +399,24 @@ public class Operator {
 			List<Announcement> anns = null;
 			if (lastDateInformed == null) {
 				anns = em.createNativeQuery(
-						"select * from announcements " + 
+						"select distinct * from announcements " + 
 								"left join announcements_cpvs " + 
 								"on announcements.id = announcements_cpvs.Announcement_id " +
 								"where announcements_cpvs.cpvs_id in " +
 								"(select users_cpvs.cpvs_id from users_cpvs where users_cpvs.User_id=" + user.getId() + ") " + 
-								"order by announcements.announcement_date DESC;",
+								"group by announcements.id " + 
+								"order by announcements.id DESC;",
 								Announcement.class).getResultList();
 			} else {
 				anns = em.createNativeQuery(
-						"select * from announcements " + 
+						"select distinct * from announcements " + 
 								"left join announcements_cpvs " + 
 								"on announcements.id = announcements_cpvs.Announcement_id " +
 								"where announcements_cpvs.cpvs_id in " +
 								"(select users_cpvs.cpvs_id from users_cpvs where users_cpvs.User_id=" + user.getId() + ") " +
 								"and announcements.announcement_date > '" + dateFormat.format(lastDateInformed)+"' " +
-								"order by announcements.announcement_date DESC;",
+								"group by announcements.id " + 
+								"order by announcements.id DESC;",
 								Announcement.class).getResultList();
 			}
 			
