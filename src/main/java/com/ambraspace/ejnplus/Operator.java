@@ -210,17 +210,20 @@ public class Operator {
 		int total = receivedData.getInt("total");
 		System.out.println("There are " + total + " announcemets.");
 
+		Announcement an = null;
 		for (int i=0; i<(total>20 ? 20 : total); i++) {
-			announcements.add(new Announcement(
-					receivedData.getJSONArray("records").getJSONObject(i).getLong("id"),
-					receivedData.getJSONArray("records").getJSONObject(i).getString("number"),
-					receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"),
-					receivedData.getJSONArray("records").getJSONObject(i).getString("name"),
-					receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"),
-					new SimpleDateFormat("d.M.yyyy.").parse(
-							receivedData.getJSONArray("records").getJSONObject(i).getString("date")),
-					receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl")
-					));
+			an = new Announcement();
+			an.setId(receivedData.getJSONArray("records").getJSONObject(i).getLong("id"));
+			an.setNumber(receivedData.getJSONArray("records").getJSONObject(i).getString("number"));
+			an.setLegalEntity(receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"));
+			an.setAnnouncementType(receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"));
+			if (receivedData.getJSONArray("records").getJSONObject(i).get("name").getClass().equals(String.class)) {
+				an.setName(receivedData.getJSONArray("records").getJSONObject(i).getString("name"));
+			}
+			an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
+							receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
+			an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
+			announcements.add(an);
 		}
 		
 		System.out.println("Collected " + announcements.size() + " announcements.");
@@ -258,16 +261,18 @@ public class Operator {
 			receivedData = new JSONObject(content.toString());
 
 			for (int i=0; i<(total-(page*20)>20 ? 20 : (total-(page*20))); i++) {
-				announcements.add(new Announcement(
-						receivedData.getJSONArray("records").getJSONObject(i).getLong("id"),
-						receivedData.getJSONArray("records").getJSONObject(i).getString("number"),
-						receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"),
-						receivedData.getJSONArray("records").getJSONObject(i).getString("name"),
-						receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"),
-						new SimpleDateFormat("d.M.yyyy.").parse(
-								receivedData.getJSONArray("records").getJSONObject(i).getString("date")),
-						receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl")
-						));
+				an = new Announcement();
+				an.setId(receivedData.getJSONArray("records").getJSONObject(i).getLong("id"));
+				an.setNumber(receivedData.getJSONArray("records").getJSONObject(i).getString("number"));
+				an.setLegalEntity(receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"));
+				an.setAnnouncementType(receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"));
+				if (receivedData.getJSONArray("records").getJSONObject(i).get("name").getClass().equals(String.class)) {
+					an.setName(receivedData.getJSONArray("records").getJSONObject(i).getString("name"));
+				}
+				an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
+								receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
+				an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
+				announcements.add(an);
 			}
 			
 			System.out.println("Collected " + announcements.size() + " announcements.");
