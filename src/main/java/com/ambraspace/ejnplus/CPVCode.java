@@ -5,6 +5,7 @@ import java.io.IOException;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;
+import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
 import org.jsoup.Jsoup;
@@ -18,14 +19,16 @@ public class CPVCode {
 	
 	private String id;
 	private String description;
+	private CPVCode parent;
 	
 	public CPVCode() {
 		
 	}
 	
-	public CPVCode(String id, String description) {
+	public CPVCode(String id, String description, CPVCode parent) {
 		this.id = id;
 		this.description = description;
+		this.parent = parent;
 	}
 
 	@Id
@@ -45,6 +48,15 @@ public class CPVCode {
 		this.description = description;
 	}
 	
+	@ManyToOne
+	public CPVCode getParent() {
+		return parent;
+	}
+
+	public void setParent(CPVCode parent) {
+		this.parent = parent;
+	}
+
 	
 
 	public static void main(String[] args) throws IOException {
