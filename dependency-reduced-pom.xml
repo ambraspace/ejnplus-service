@@ -27,7 +27,7 @@
             <configuration>
               <transformers>
                 <transformer>
-                  <mainClass>com.ambraspace.ejnplus.Announcement</mainClass>
+                  <mainClass>com.ambraspace.ejnplus.Operator</mainClass>
                 </transformer>
               </transformers>
             </configuration>

@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.ambraspace</groupId>
   <artifactId>ejnplus</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0.9</version>
   <name>EJNplus</name>
   	<build>
 		<plugins>
@@ -29,7 +29,7 @@
 							<transformers>
 								<transformer
 									implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-									<mainClass>com.ambraspace.ejnplus.HibernateTest</mainClass>
+									<mainClass>com.ambraspace.ejnplus.Operator</mainClass>
 								</transformer>
 							</transformers>
 						</configuration>

@@ -20,10 +20,10 @@
                       value="jdbc:mysql://localhost/ejnplus" />
 
             <property name="javax.persistence.jdbc.user"
-                      value="ambra" />
+                      value="ejnplus" />
 
             <property name="javax.persistence.jdbc.password"
-                      value="" />
+                      value="ejnplus" />
 
             <property name="hibernate.show_sql"
                       value="true" />
