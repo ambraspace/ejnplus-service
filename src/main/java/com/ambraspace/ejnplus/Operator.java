@@ -463,9 +463,8 @@ public class Operator {
 			Email eml = emlBuilder.buildEmail();
 			
 			Mailer mailer = MailerBuilder
-					.withSMTPServer("ambraspace.com", 465, "mail", ":y&1AIK[vD*5")
-					.withTransportStrategy(TransportStrategy.SMTPS)
-					.trustingSSLHosts("ambraspace.com")
+					.withSMTPServer("localhost", 25)
+					.withTransportStrategy(TransportStrategy.SMTP)
 					.buildMailer();
 			
 			mailer.sendMail(eml);
