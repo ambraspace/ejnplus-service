@@ -433,7 +433,7 @@ public class Operator {
 			EmailPopulatingBuilder emlBuilder = EmailBuilder.startingBlank()
 					.to(user.getEmail())
 					.withSubject("EJNplus - nova obavještenja")
-					.from("root@ambraspace.com")
+					.from("root@elektrotim.rs.ba")
 					.withHTMLText("<style>" +
 							"body {background-color: white; font-family: \"Helvetica\", sans-serif; }" +
 							"table {border-collapse: collapse; font-size: 0.8em; } " +
