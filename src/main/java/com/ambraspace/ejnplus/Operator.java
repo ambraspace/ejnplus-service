@@ -399,29 +399,32 @@ public class Operator {
 			
 			Date lastDateInformed = em.createQuery("select u.lastDateInformed from User u where u.id=" + user.getId(), Date.class).getSingleResult();
 			
-			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+			SimpleDateFormat dbDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+			SimpleDateFormat localDateFormat = new SimpleDateFormat("d.M.yyyy.");
 			
 			List<Announcement> anns = null;
 			if (lastDateInformed == null) {
 				anns = em.createNativeQuery(
-						"select distinct * from announcements " + 
-								"left join announcements_cpvs " + 
-								"on announcements.id = announcements_cpvs.Announcement_id " +
-								"where announcements_cpvs.cpvs_id in " +
-								"(select users_cpvs.cpvs_id from users_cpvs where users_cpvs.User_id=" + user.getId() + ") " + 
-								"group by announcements.id " + 
-								"order by announcements.id DESC;",
+						"select * from announcements " + 
+								"where id in " +
+								"(select announcement_id from announcements_cpvs " + 
+								"where cpvs_id in " + 
+								"(select cpvs_id from users_cpvs " + 
+								"where user_id=" + user.getId() + ")) and " +
+								"DATEDIFF(CURRENT_DATE, announcement_date)<90 " +
+								"order by id DESC",
 								Announcement.class).getResultList();
 			} else {
 				anns = em.createNativeQuery(
-						"select distinct * from announcements " + 
-								"left join announcements_cpvs " + 
-								"on announcements.id = announcements_cpvs.Announcement_id " +
-								"where announcements_cpvs.cpvs_id in " +
-								"(select users_cpvs.cpvs_id from users_cpvs where users_cpvs.User_id=" + user.getId() + ") " +
-								"and announcements.announcement_date > '" + dateFormat.format(lastDateInformed)+"' " +
-								"group by announcements.id " + 
-								"order by announcements.id DESC;",
+						"select * from announcements " + 
+								"where id in " +
+								"(select announcement_id from announcements_cpvs " + 
+								"where cpvs_id in " + 
+								"(select cpvs_id from users_cpvs " + 
+								"where user_id=" + user.getId() + ")) and " +
+								"announcement_date>'" + dbDateFormat.format(lastDateInformed) + "' and " +
+								"DATEDIFF(CURRENT_DATE, announcement_date)<90 " +
+								"order by id DESC",
 								Announcement.class).getResultList();
 			}
 			
@@ -431,9 +434,9 @@ public class Operator {
 			
 			
 			EmailPopulatingBuilder emlBuilder = EmailBuilder.startingBlank()
-					.to(user.getEmail())
+					.to(user.getName() + " " + user.getSurname(), user.getEmail())
 					.withSubject("EJNplus - nova obavještenja")
-					.from("root@elektrotim.rs.ba")
+					.from("EJNplus", "noreply@avantous.com")
 					.withHTMLText("<style>" +
 							"body {background-color: white; font-family: \"Helvetica\", sans-serif; }" +
 							"table {border-collapse: collapse; font-size: 0.8em; } " +
@@ -452,7 +455,7 @@ public class Operator {
 					lastDateInformed = an.getDate();
 				}
 				emlBuilder.appendTextHTML("<tr>" + 
-						"<td>" + dateFormat.format(an.getDate()) + "</td>" +
+						"<td>" + localDateFormat.format(an.getDate()) + "</td>" +
 						"<td>" + an.getLegalEntity() + "</td>" +
 						"<td>" + an.getName() + "</td>" +
 						"<td>" + an.getAnnouncementType() + "</td>" +

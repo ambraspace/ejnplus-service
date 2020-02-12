@@ -20,16 +20,14 @@
                       value="jdbc:mysql://localhost/ejnplus" />
 
             <property name="javax.persistence.jdbc.user"
-                      value="ejnplus" />
+                      value="ambra" />
 
             <property name="javax.persistence.jdbc.password"
-                      value="ejnplus" />
+                      value="" />
 
             <property name="hibernate.show_sql"
                       value="true" />
 
-            <property name="hibernate.hbm2ddl.auto"
-                      value="update" />
         </properties>
 
     </persistence-unit>

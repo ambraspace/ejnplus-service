@@ -6,7 +6,6 @@ import java.util.List;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
-import javax.persistence.EntityManagerFactory;
 import javax.persistence.Id;
 import javax.persistence.ManyToMany;
 import javax.persistence.Table;
@@ -25,8 +24,6 @@ public class Announcement {
 	private String url;
 	private List<CPVCode> cpvs = new ArrayList<CPVCode>();
 	
-	
-	public static EntityManagerFactory emf;
 	
 	public Announcement() {
 		
@@ -76,6 +73,7 @@ public class Announcement {
 	public void setName(String name) {
 		this.name = name;
 	}
+	
 	public String getAnnouncementType() {
 		return announcementType;
 	}
