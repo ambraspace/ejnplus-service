@@ -411,7 +411,7 @@ public class Operator {
 								"where cpvs_id in " + 
 								"(select cpvs_id from users_cpvs " + 
 								"where user_id=" + user.getId() + ")) and " +
-								"DATEDIFF(CURRENT_DATE, announcement_date)<90 " +
+								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +
 								"order by id DESC",
 								Announcement.class).getResultList();
 			} else {
@@ -423,7 +423,7 @@ public class Operator {
 								"(select cpvs_id from users_cpvs " + 
 								"where user_id=" + user.getId() + ")) and " +
 								"announcement_date>'" + dbDateFormat.format(lastDateInformed) + "' and " +
-								"DATEDIFF(CURRENT_DATE, announcement_date)<90 " +
+								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +
 								"order by id DESC",
 								Announcement.class).getResultList();
 			}
