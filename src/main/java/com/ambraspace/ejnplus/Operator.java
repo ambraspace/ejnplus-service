@@ -2,6 +2,7 @@ package com.ambraspace.ejnplus;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.net.URL;
@@ -15,12 +16,17 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
+import org.apache.pdfbox.multipdf.Splitter;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -345,31 +351,101 @@ public class Operator {
 			
 			receivedData = new JSONObject(content.toString());
 			
-			doc = Jsoup.connect(receivedData.getString("url")).get();
+			// Preuzmi PDF
 			
-			els = doc.getElementsByTag("span");
+			URL dlPDF = new URL(receivedData.getString("url").replace(".html", ".pdf"));
+			HttpsURLConnection connection = (HttpsURLConnection)dlPDF.openConnection();
+			InputStream input = connection.getInputStream();
+			PDDocument pdfDocument = PDDocument.load(input);
+			input.close();
+			connection.disconnect();
 			
-			el = null;
-			String text = null;
-			int pos = 0;
-			for (int i=0; i<els.size(); i++) {
-				el = els.get(i);
-				text = el.text();
-				if (text.startsWith("II 4.ц.") || text.startsWith("II 4.c.")) {
-					pos = i;
+			// Razdvoji stranice
+			
+			Splitter splitter = new Splitter();
+			List<PDDocument> pdfPages = splitter.split(pdfDocument);
+
+			// Pretvori u TXT svaku stranicu
+			
+			List<String> pdfPageTexts = new ArrayList<String>();
+			PDFTextStripper stripper = new PDFTextStripper();
+			stripper.setSortByPosition(true);
+			for (PDDocument pdfPage:pdfPages)
+			{
+				pdfPageTexts.add(stripper.getText(pdfPage));
+			}
+			
+			
+			// Clenaup
+			for (PDDocument d:pdfPages)
+			{
+				d.close();
+			}
+			pdfDocument.close();
+			
+			// Izbaci prazne linije iz svakog TXT fajla
+			// i kombinuj sve TXT fajlove u jedan String
+			String[] lines = null;
+			List<String> newDocTxt = new ArrayList<String>();
+			for (String pdfPageText:pdfPageTexts)
+			{
+				pdfPageText = pdfPageText.replaceAll("\r", "\n");
+				lines = pdfPageText.split("\n");
+
+				for (String l:lines)
+				{
+					l=l.trim();
+					if (!l.equals(""))
+					{
+						newDocTxt.add(l);
+					}
+				}
+				
+				newDocTxt.remove(newDocTxt.size()-1);
+
+			}
+			
+			// Izdvoji CPV kodove
+			
+			int start=0, stop=newDocTxt.size()-1;
+			String l = null;
+			for (int i=0; i<newDocTxt.size(); i++)
+			{
+				l=newDocTxt.get(i);
+				if (l.startsWith("II 4.c") || l.startsWith("II 4.ц")) {
+					start=i+1;
 					break;
+				} else {
+					continue;
 				}
 			}
 			
-			for (int i=pos+1; i<els.size(); i++) {
-				el = els.get(i);
-				text = el.text().trim();
-				if (text.startsWith("II 5")) {
+			for (int i=start; i<newDocTxt.size(); i++)
+			{
+				l=newDocTxt.get(i);
+				if (l.startsWith("II")) {
+					stop=i-1;
 					break;
+				} else {
+					continue;
 				}
-				if (text.matches("^\\d{8}-\\d")) {
-					announcement.getCpvs().add(codesMap.get(text));
+			}
+			
+			Pattern cpvPattern = Pattern.compile("\\d{8,8}-\\d{1,1}");
+			Matcher matcher = null;
+			String cpvCode = null;
+			for (int i=start; i<=stop; i++)
+			{
+				l = newDocTxt.get(i);
+				matcher = cpvPattern.matcher(l);
+				if (matcher.find())
+				{
+					cpvCode = l.substring(matcher.start(), matcher.end());
+					announcement.getCpvs().add(codesMap.get(cpvCode));
+				} else {
+					continue;
 				}
+				
 			}
 			
 			if (announcement.getCpvs().size()==0) {
