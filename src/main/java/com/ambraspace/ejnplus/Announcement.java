@@ -23,6 +23,7 @@ public class Announcement {
 	private Date date;
 	private String url;
 	private List<CPVCode> cpvs = new ArrayList<CPVCode>();
+	private String text;
 	
 	
 	public Announcement() {
@@ -104,6 +105,17 @@ public class Announcement {
 	public void setCpvs(List<CPVCode> cpvs) {
 		this.cpvs = cpvs;
 	}
-	
 
+	@Column(columnDefinition="TEXT")
+	public String getText()
+	{
+		return text;
+	}
+
+	
+	public void setText(String text)
+	{
+		this.text = text;
+	}
+	
 }

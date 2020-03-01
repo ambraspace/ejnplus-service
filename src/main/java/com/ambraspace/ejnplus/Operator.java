@@ -452,6 +452,13 @@ public class Operator {
 				throw new NoCPVCodesException();
 			}
 			
+			StringBuffer text = new StringBuffer();
+			for (String row:newDocTxt)
+			{
+				text.append(row + "\n");
+			}
+			announcement.setText(text.toString());
+			
 		}
 
 		return announcements;
