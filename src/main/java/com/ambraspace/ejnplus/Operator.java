@@ -542,7 +542,7 @@ public class Operator {
 						"<td>" + an.getLegalEntity() + "</td>" +
 						"<td>" + an.getName() + "</td>" +
 						"<td>" + an.getAnnouncementType() + "</td>" +
-						"<td><a href=\"" + an.getUrl() + "\">" + an.getNumber() + "</a></td></tr>");
+						"<td><a href=\"https://ejnplus.avantous.com/getdoc.php?type=announcement&id=" + an.getId() + "\">" + an.getNumber() + "</a></td></tr>");
 			}
 			
 			emlBuilder.appendTextHTML("</table>");
