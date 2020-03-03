@@ -8,11 +8,15 @@ import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import javax.persistence.ManyToMany;
+import javax.persistence.PrimaryKeyJoinColumn;
+import javax.persistence.SecondaryTable;
 import javax.persistence.Table;
 
 
 @Entity (name="Announcement")
 @Table (name="announcements")
+@SecondaryTable(name="announcement_text",
+	pkJoinColumns=@PrimaryKeyJoinColumn(name="announcement_id"))
 public class Announcement {
 	
 	private long id;
@@ -106,7 +110,7 @@ public class Announcement {
 		this.cpvs = cpvs;
 	}
 
-	@Column(columnDefinition="TEXT")
+	@Column(table="announcement_text", columnDefinition="TEXT")
 	public String getText()
 	{
 		return text;

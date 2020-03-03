@@ -488,7 +488,9 @@ public class Operator {
 			List<Announcement> anns = null;
 			if (lastDateInformed == null) {
 				anns = em.createNativeQuery(
-						"select * from announcements " + 
+						"select * from announcements left join " + 
+								"announcement_text on " +
+								"announcements.id = announcement_text.announcement_id " +
 								"where id in " +
 								"(select announcement_id from announcements_cpvs " + 
 								"where cpvs_id in " + 
@@ -499,7 +501,9 @@ public class Operator {
 								Announcement.class).getResultList();
 			} else {
 				anns = em.createNativeQuery(
-						"select * from announcements " + 
+						"select * from announcements left join " + 
+								"announcement_text on " +
+								"announcements.id = announcement_text.announcement_id " +
 								"where id in " +
 								"(select announcement_id from announcements_cpvs " + 
 								"where cpvs_id in " + 
