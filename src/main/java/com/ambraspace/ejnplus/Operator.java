@@ -56,7 +56,6 @@ public class Operator {
 		
 		EntityManager em = emf.createEntityManager();
 		
-		List<Announcement> announcements = null;
 		try {
 			
 			Date fromDate = em.createQuery("select max(a.date) from Announcement a", Date.class).getSingleResult();
@@ -76,7 +75,7 @@ public class Operator {
 				return;
 			}
 			
-			announcements = collectAnnouncementsByDate(
+			collectAnnouncementsByDate(em, 
 					LocalDate.of(
 							calFrom.get(Calendar.YEAR), 
 							calFrom.get(Calendar.MONTH)+1,
@@ -85,18 +84,6 @@ public class Operator {
 							calTo.get(Calendar.YEAR), 
 							calTo.get(Calendar.MONTH)+1,
 							calTo.get(Calendar.DAY_OF_MONTH)));
-			
-			if (announcements.size()>0) {
-				System.out.println("Saving data to the database...");
-				em.getTransaction().begin();
-	
-				for (Announcement an:announcements) {
-					em.persist(an);
-				}
-	
-				em.getTransaction().commit();
-				System.out.println("Saved.");
-			}
 
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -121,7 +108,7 @@ public class Operator {
 	}
 	
 	
-	private static List<Announcement> collectAnnouncementsByDate(LocalDate dateFrom, LocalDate dateTo) throws IOException, JSONException, TokenException, ParseException, NoCPVCodesException {
+	private static void collectAnnouncementsByDate(EntityManager em, LocalDate dateFrom, LocalDate dateTo) throws IOException, JSONException, TokenException, ParseException, NoCPVCodesException {
 		
 		List<Announcement> announcements = new ArrayList<Announcement>();
 		
@@ -229,6 +216,7 @@ public class Operator {
 			an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
 							receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
 			an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
+			an.setDetails(new AnnouncementDetails());
 			announcements.add(an);
 		}
 		
@@ -278,6 +266,7 @@ public class Operator {
 				an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
 								receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
 				an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
+				an.setDetails(new AnnouncementDetails());
 				announcements.add(an);
 			}
 			
@@ -286,7 +275,8 @@ public class Operator {
 		}
 		
 		if (announcements.size()==0) {
-			return announcements;
+			System.out.println("No new announcements.");
+			return;
 		}
 
 		
@@ -294,15 +284,17 @@ public class Operator {
 		 * Finally, get CPVs for each announcement
 		 */
 
-		EntityManager em = emf.createEntityManager();
 		List<CPVCode> codes = em.createQuery("from CPVCode", CPVCode.class).getResultList();
-		em.close();
 
 		Map<String, CPVCode> codesMap = new HashMap<>();
 
 		for (CPVCode code:codes) {
 			codesMap.put(code.getId(), code);
 		}
+		
+		System.out.println("Saving to database...");
+		
+		em.getTransaction().begin();
 
 		for (Announcement announcement:announcements) {
 			
@@ -457,11 +449,17 @@ public class Operator {
 			{
 				text.append(row + "\n");
 			}
-			announcement.setText(text.toString());
+			announcement.getDetails().setText(text.toString());
+			
+			em.persist(announcement.getDetails());
+			em.persist(announcement);
 			
 		}
+		
+		em.getTransaction().commit();
+		
+		System.out.println("Data saved.");
 
-		return announcements;
 	}
 	
 	
@@ -488,26 +486,22 @@ public class Operator {
 			List<Announcement> anns = null;
 			if (lastDateInformed == null) {
 				anns = em.createNativeQuery(
-						"select * from announcements left join " + 
-								"announcement_text on " +
-								"announcements.id = announcement_text.announcement_id " +
+						"select * from announcements " +
 								"where id in " +
-								"(select announcement_id from announcements_cpvs " + 
-								"where cpvs_id in " + 
-								"(select cpvs_id from users_cpvs " + 
+								"(select announcement_id from announcements_cpvs " +
+								"where cpvs_id in " +
+								"(select cpvs_id from users_cpvs " +
 								"where user_id=" + user.getId() + ")) and " +
 								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +
 								"order by announcement_date DESC, id DESC",
 								Announcement.class).getResultList();
 			} else {
 				anns = em.createNativeQuery(
-						"select * from announcements left join " + 
-								"announcement_text on " +
-								"announcements.id = announcement_text.announcement_id " +
+						"select * from announcements " +
 								"where id in " +
-								"(select announcement_id from announcements_cpvs " + 
-								"where cpvs_id in " + 
-								"(select cpvs_id from users_cpvs " + 
+								"(select announcement_id from announcements_cpvs " +
+								"where cpvs_id in " +
+								"(select cpvs_id from users_cpvs " +
 								"where user_id=" + user.getId() + ")) and " +
 								"announcement_date>'" + dbDateFormat.format(lastDateInformed) + "' and " +
 								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +

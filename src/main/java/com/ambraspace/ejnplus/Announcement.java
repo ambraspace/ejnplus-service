@@ -6,17 +6,16 @@ import java.util.List;
 
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.FetchType;
 import javax.persistence.Id;
+import javax.persistence.JoinColumn;
 import javax.persistence.ManyToMany;
-import javax.persistence.PrimaryKeyJoinColumn;
-import javax.persistence.SecondaryTable;
+import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
 
 @Entity (name="Announcement")
 @Table (name="announcements")
-@SecondaryTable(name="announcement_text",
-	pkJoinColumns=@PrimaryKeyJoinColumn(name="announcement_id"))
 public class Announcement {
 	
 	private long id;
@@ -27,7 +26,7 @@ public class Announcement {
 	private Date date;
 	private String url;
 	private List<CPVCode> cpvs = new ArrayList<CPVCode>();
-	private String text;
+	private AnnouncementDetails details;
 	
 	
 	public Announcement() {
@@ -36,7 +35,7 @@ public class Announcement {
 	
 	public Announcement(long id, String number,
 			String legalEntity, String name, String announcementType,
-			Date date, String url) {
+			Date date, String url, AnnouncementDetails details) {
 		
 		this.id = id;
 		this.number = number;
@@ -45,6 +44,7 @@ public class Announcement {
 		this.announcementType = announcementType;
 		this.date = date;
 		this.url = url;
+		this.details = details;
 		
 	}
 
@@ -110,16 +110,17 @@ public class Announcement {
 		this.cpvs = cpvs;
 	}
 
-	@Column(table="announcement_text", columnDefinition="TEXT")
-	public String getText()
+	@OneToOne (fetch=FetchType.LAZY)
+	@JoinColumn (name = "details_id")
+	public AnnouncementDetails getDetails()
 	{
-		return text;
+		return details;
 	}
 
 	
-	public void setText(String text)
+	public void setDetails(AnnouncementDetails details)
 	{
-		this.text = text;
+		this.details = details;
 	}
 	
 }
