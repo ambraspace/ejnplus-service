@@ -478,7 +478,7 @@ public class Operator {
 		
 		for (User user:users) {
 			
-			Date lastDateInformed = em.createQuery("select u.lastDateInformed from User u where u.id=" + user.getId(), Date.class).getSingleResult();
+			Date lastDateInformed = user.getLastDateInformed();
 			
 			SimpleDateFormat dbDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 			SimpleDateFormat localDateFormat = new SimpleDateFormat("d.M.yyyy.");
