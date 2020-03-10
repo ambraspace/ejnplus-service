@@ -46,19 +46,23 @@ import com.ambraspace.ejnplus.exceptions.TokenException;
 
 public class Operator {
 	
-	private static EntityManagerFactory emf;
 	
-	public static void collectAnnouncements() {
+	String token = null;
+	Map<String, CPVCode> codes = null;
+	
+	public void collectAnnouncements() {
 		
-		if (emf==null) {
-			emf = Persistence.createEntityManagerFactory("default");
-		}
+		EntityManagerFactory emf = Persistence.createEntityManagerFactory("default");
 		
 		EntityManager em = emf.createEntityManager();
 		
 		try {
 			
 			Date fromDate = em.createQuery("select max(a.date) from Announcement a", Date.class).getSingleResult();
+			if (fromDate == null)
+			{
+				fromDate = (new SimpleDateFormat("yyyy-MM-dd")).parse("2014-11-27");
+			}
 			Calendar calFrom = Calendar.getInstance();
 			Calendar calTo = Calendar.getInstance();
 			calFrom.setTimeInMillis(fromDate.getTime());
@@ -75,15 +79,174 @@ public class Operator {
 				return;
 			}
 			
-			collectAnnouncementsByDate(em, 
-					LocalDate.of(
-							calFrom.get(Calendar.YEAR), 
-							calFrom.get(Calendar.MONTH)+1,
-							calFrom.get(Calendar.DAY_OF_MONTH)),
-					LocalDate.of(
-							calTo.get(Calendar.YEAR), 
-							calTo.get(Calendar.MONTH)+1,
-							calTo.get(Calendar.DAY_OF_MONTH)));
+
+			/*
+			 * First, get the token.
+			 */
+			
+			Document doc = Jsoup.connect("https://www.ejn.gov.ba/Announcement/Search").get();
+
+			Elements els = doc.getElementsByTag("script");
+			
+			Iterator<Element> it = els.iterator();
+			Element el = null;
+			
+			while (it.hasNext()) {
+				el = it.next();
+				if (el.data().matches("^var csrfToken\\s*=\\s*'\\S+';$")) {
+					token = el.data();
+					token = token.replaceAll("^var csrfToken\\s*=\\s*'", "");
+					token = token.replaceAll("';$", "");
+				}
+			}
+			
+			if (token == null || token.equals("")) {
+				throw new TokenException();
+			} else {
+				System.out.println("Token received.");
+			}
+			
+			
+			/*
+			 * Prepare CPVCode's Map
+			 */
+			
+			codes = new HashMap<String, CPVCode>();
+			
+			List<CPVCode> codeList = em.createQuery("from CPVCode", CPVCode.class).getResultList();
+			for (CPVCode c:codeList)
+			{
+				codes.put(c.getId(), c);
+			}
+			
+			/*
+			 * Now, collect all announcement from specific date.
+			 */
+			
+			LocalDate dateFrom = LocalDate.of(
+					calFrom.get(Calendar.YEAR), 
+					calFrom.get(Calendar.MONTH)+1,
+					calFrom.get(Calendar.DAY_OF_MONTH));
+			
+			LocalDate dateTo = LocalDate.of(
+					calTo.get(Calendar.YEAR), 
+					calTo.get(Calendar.MONTH)+1,
+					calTo.get(Calendar.DAY_OF_MONTH));
+			
+			String sDateFrom = dateFrom.toString() + "T00:00:00.000Z";
+			String sDateTo = dateTo.toString() + "T00:00:00.000Z";
+
+			JSONObject requestData = new JSONObject();
+			
+			requestData.put("announcementDateFrom", sDateFrom);
+			requestData.put("announcementDateTo", sDateTo);
+			requestData.put("page", 1);
+			requestData.put("rows", 20);
+			requestData.put("sidx", "id");
+			requestData.put("sord", "DESC");
+			requestData.put("cAName", JSONObject.NULL);
+			requestData.put("uniqueIdentificationNumber", JSONObject.NULL);
+			requestData.put("procedureName", JSONObject.NULL);
+			requestData.put("number", JSONObject.NULL);
+			requestData.put("type", JSONObject.NULL);
+			requestData.put("procedureStatus", JSONObject.NULL);
+			requestData.put("contractType", JSONObject.NULL);
+			requestData.put("cPVDivision", JSONObject.NULL);
+			requestData.put("procedureCategoryId", JSONObject.NULL);
+			requestData.put("isAuctionOnline", JSONObject.NULL);
+			requestData.put("eProcurement", JSONObject.NULL);
+			requestData.put("justValidProcedure", JSONObject.NULL);
+			requestData.put("supplierName", JSONObject.NULL);
+			requestData.put("supplierUniqueIdentificationNumber", JSONObject.NULL);
+			requestData.put("isDocumentationOnline", JSONObject.NULL);
+			requestData.put("isTenderDocumentationIconAllowed", JSONObject.NULL);
+			requestData.put("isMasterAgreement", JSONObject.NULL);
+			requestData.put("isAwardCriterionIconVisible", JSONObject.NULL);
+			requestData.put("hasLots", JSONObject.NULL);
+			requestData.put("isJointProcurement", JSONObject.NULL);
+			requestData.put("isTdVisible", JSONObject.NULL);
+			
+			URL url = new URL("https://www.ejn.gov.ba/api/Announcement/Search");
+			HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
+			conn.setDoOutput(true);
+			conn.setRequestProperty("Content-Type", "application/json;charset=utf-8");
+			conn.setRequestProperty("X-JsonRequestVerificationToken", token);
+			conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
+			conn.setRequestMethod("POST");
+			PrintStream out = new PrintStream(conn.getOutputStream());
+			out.println(requestData.toString());
+			out.close();
+			
+			BufferedReader in = new BufferedReader(
+					new InputStreamReader(conn.getInputStream()));
+			
+			StringBuffer content = new StringBuffer();
+			String line = null;
+			while ((line=in.readLine())!=null) {
+				content.append(line);
+			}
+			in.close();
+			conn.disconnect();
+
+			JSONObject receivedData = new JSONObject(content.toString());
+
+			int total = receivedData.getInt("total");
+			System.out.println("There are " + total + " announcemets.");
+			
+			
+			List<Announcement> anns = getAnnouncementsFromJSON(receivedData);
+			
+			em.getTransaction().begin();
+			for (Announcement ann:anns)
+			{
+				em.persist(ann.getDetails());
+				em.persist(ann);
+			}
+			em.getTransaction().commit();
+			
+			
+			int pages;
+			pages = total / 20;
+			if (total>(pages*20)) pages++;
+			
+			for (int page=2; page<=pages; page++) {
+
+				requestData.put("page", page);
+
+				conn = (HttpsURLConnection)url.openConnection();
+				conn.setDoOutput(true);
+				conn.setRequestProperty("Content-Type", "application/json;charset=utf-8");
+				conn.setRequestProperty("X-JsonRequestVerificationToken", token);
+				conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
+				conn.setRequestMethod("POST");
+				out = new PrintStream(conn.getOutputStream());
+				out.println(requestData.toString());
+				out.close();
+				
+				in = new BufferedReader(
+						new InputStreamReader(conn.getInputStream()));
+				
+				content = new StringBuffer();
+				line = null;
+				while ((line=in.readLine())!=null) {
+					content.append(line);
+				}
+				in.close();
+				conn.disconnect();
+
+				receivedData = new JSONObject(content.toString());
+				
+				anns = getAnnouncementsFromJSON(receivedData);
+				
+				em.getTransaction().begin();
+				for (Announcement ann:anns)
+				{
+					em.persist(ann.getDetails());
+					em.persist(ann);
+				}
+				em.getTransaction().commit();
+
+			}
 
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
@@ -102,205 +265,47 @@ public class Operator {
 			e.printStackTrace();
 		} finally {
 			em.close();
+			emf.close();
 		}
 
 		
 	}
 	
 	
-	private static void collectAnnouncementsByDate(EntityManager em, LocalDate dateFrom, LocalDate dateTo) throws IOException, JSONException, TokenException, ParseException, NoCPVCodesException {
+	private List<Announcement> getAnnouncementsFromJSON(JSONObject jsonData)
+			throws NoCPVCodesException, JSONException, ParseException, IOException
+	{
 		
-		List<Announcement> announcements = new ArrayList<Announcement>();
-		
-		/*
-		 * First, get the token.
-		 */
-		
-		Document doc = Jsoup.connect("https://www.ejn.gov.ba/Announcement/Search").get();
+		List<Announcement> anns = new ArrayList<Announcement>();
 
-		Elements els = doc.getElementsByTag("script");
-		
-		Iterator<Element> it = els.iterator();
-		Element el = null;
-		
-		String token = null;
-		while (it.hasNext()) {
-			el = it.next();
-			if (el.data().matches("^var csrfToken\\s*=\\s*'\\S+';$")) {
-				token = el.data();
-				token = token.replaceAll("^var csrfToken\\s*=\\s*'", "");
-				token = token.replaceAll("';$", "");
+		for (int i=0; i<jsonData.getJSONArray("records").length(); i++) {
+			Announcement ann = new Announcement();
+			JSONObject jsonAnn = jsonData.getJSONArray("records").getJSONObject(i);
+			ann.setId(jsonAnn.getLong("id"));
+			ann.setNumber(jsonAnn.getString("number"));
+			ann.setLegalEntity(jsonAnn.getString("legalEntity"));
+			ann.setAnnouncementType(jsonAnn.getString("announcementType"));
+			if (jsonAnn.get("name").getClass().equals(String.class)) {
+				ann.setName(jsonAnn.getString("name"));
 			}
+			ann.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
+					jsonAnn.getString("date")));
+			ann.setUrl(jsonAnn.getString("downloadUrl"));
+			ann.setDetails(new AnnouncementDetails());
+			anns.add(ann);
 		}
 		
-		if (token == null || token.equals("")) {
-			throw new TokenException();
-		} else {
-			System.out.println("Token received.");
-		}
-		
-		/*
-		 * Now, collect all announcement from specific date.
-		 */
-		
-		String sDateFrom = dateFrom.toString() + "T00:00:00.000Z";
-		String sDateTo = dateTo.toString() + "T00:00:00.000Z";
 
-		JSONObject requestData = new JSONObject();
-		
-		requestData.put("announcementDateFrom", sDateFrom);
-		requestData.put("announcementDateTo", sDateTo);
-		requestData.put("page", 1);
-		requestData.put("rows", 20);
-		requestData.put("sidx", "id");
-		requestData.put("sord", "DESC");
-		requestData.put("cAName", JSONObject.NULL);
-		requestData.put("uniqueIdentificationNumber", JSONObject.NULL);
-		requestData.put("procedureName", JSONObject.NULL);
-		requestData.put("number", JSONObject.NULL);
-		requestData.put("type", JSONObject.NULL);
-		requestData.put("procedureStatus", JSONObject.NULL);
-		requestData.put("contractType", JSONObject.NULL);
-		requestData.put("cPVDivision", JSONObject.NULL);
-		requestData.put("procedureCategoryId", JSONObject.NULL);
-		requestData.put("isAuctionOnline", JSONObject.NULL);
-		requestData.put("eProcurement", JSONObject.NULL);
-		requestData.put("justValidProcedure", JSONObject.NULL);
-		requestData.put("supplierName", JSONObject.NULL);
-		requestData.put("supplierUniqueIdentificationNumber", JSONObject.NULL);
-		requestData.put("isDocumentationOnline", JSONObject.NULL);
-		requestData.put("isTenderDocumentationIconAllowed", JSONObject.NULL);
-		requestData.put("isMasterAgreement", JSONObject.NULL);
-		requestData.put("isAwardCriterionIconVisible", JSONObject.NULL);
-		requestData.put("hasLots", JSONObject.NULL);
-		requestData.put("isJointProcurement", JSONObject.NULL);
-		requestData.put("isTdVisible", JSONObject.NULL);
-		
-		URL url = new URL("https://www.ejn.gov.ba/api/Announcement/Search");
-		HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
-		conn.setDoOutput(true);
-		conn.setRequestProperty("Content-Type", "application/json;charset=utf-8");
-		conn.setRequestProperty("X-JsonRequestVerificationToken", token);
-		conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
-		conn.setRequestMethod("POST");
-		PrintStream out = new PrintStream(conn.getOutputStream());
-		out.println(requestData.toString());
-		out.close();
-		
-		BufferedReader in = new BufferedReader(
-				new InputStreamReader(conn.getInputStream()));
-		
-		StringBuffer content = new StringBuffer();
-		String line = null;
-		while ((line=in.readLine())!=null) {
-			content.append(line);
-		}
-		in.close();
-		conn.disconnect();
-
-		JSONObject receivedData = new JSONObject(content.toString());
-
-		int total = receivedData.getInt("total");
-		System.out.println("There are " + total + " announcemets.");
-
-		Announcement an = null;
-		for (int i=0; i<(total>20 ? 20 : total); i++) {
-			an = new Announcement();
-			an.setId(receivedData.getJSONArray("records").getJSONObject(i).getLong("id"));
-			an.setNumber(receivedData.getJSONArray("records").getJSONObject(i).getString("number"));
-			an.setLegalEntity(receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"));
-			an.setAnnouncementType(receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"));
-			if (receivedData.getJSONArray("records").getJSONObject(i).get("name").getClass().equals(String.class)) {
-				an.setName(receivedData.getJSONArray("records").getJSONObject(i).getString("name"));
-			}
-			an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
-							receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
-			an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
-			an.setDetails(new AnnouncementDetails());
-			announcements.add(an);
-		}
-		
-		System.out.println("Collected " + announcements.size() + " announcements.");
-		
-		int pages;
-		pages = total / 20;
-		if (total>(pages*20))
-			pages++;
-		
-		for (int page=1; page<pages; page++) {
-
-			requestData.put("page", page+1);
-
-			conn = (HttpsURLConnection)url.openConnection();
-			conn.setDoOutput(true);
-			conn.setRequestProperty("Content-Type", "application/json;charset=utf-8");
-			conn.setRequestProperty("X-JsonRequestVerificationToken", token);
-			conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
-			conn.setRequestMethod("POST");
-			out = new PrintStream(conn.getOutputStream());
-			out.println(requestData.toString());
-			out.close();
+		for (Announcement ann:anns) {
 			
-			in = new BufferedReader(
-					new InputStreamReader(conn.getInputStream()));
-			
-			content = new StringBuffer();
-			line = null;
-			while ((line=in.readLine())!=null) {
-				content.append(line);
-			}
-			in.close();
-			conn.disconnect();
+			URL url = null;
+			HttpsURLConnection conn = null;
+			BufferedReader in = null;
+			StringBuffer content = null;
+			String line = null;
+			if (ann.getAnnouncementType().contains("Ispravka obavještenja")) {
 
-			receivedData = new JSONObject(content.toString());
-
-			for (int i=0; i<(total-(page*20)>20 ? 20 : (total-(page*20))); i++) {
-				an = new Announcement();
-				an.setId(receivedData.getJSONArray("records").getJSONObject(i).getLong("id"));
-				an.setNumber(receivedData.getJSONArray("records").getJSONObject(i).getString("number"));
-				an.setLegalEntity(receivedData.getJSONArray("records").getJSONObject(i).getString("legalEntity"));
-				an.setAnnouncementType(receivedData.getJSONArray("records").getJSONObject(i).getString("announcementType"));
-				if (receivedData.getJSONArray("records").getJSONObject(i).get("name").getClass().equals(String.class)) {
-					an.setName(receivedData.getJSONArray("records").getJSONObject(i).getString("name"));
-				}
-				an.setDate(new SimpleDateFormat("d.M.yyyy.").parse(
-								receivedData.getJSONArray("records").getJSONObject(i).getString("date")));
-				an.setUrl(receivedData.getJSONArray("records").getJSONObject(i).getString("downloadUrl"));
-				an.setDetails(new AnnouncementDetails());
-				announcements.add(an);
-			}
-			
-			System.out.println("Collected " + announcements.size() + " announcements.");
-		
-		}
-		
-		if (announcements.size()==0) {
-			System.out.println("No new announcements.");
-			return;
-		}
-
-		
-		/*
-		 * Finally, get CPVs for each announcement
-		 */
-
-		List<CPVCode> codes = em.createQuery("from CPVCode", CPVCode.class).getResultList();
-
-		Map<String, CPVCode> codesMap = new HashMap<>();
-
-		for (CPVCode code:codes) {
-			codesMap.put(code.getId(), code);
-		}
-		
-		System.out.println("Saving to database...");
-		
-		em.getTransaction().begin();
-
-		for (Announcement announcement:announcements) {
-			
-			if (announcement.getAnnouncementType().contains("Ispravka obavještenja")) {
-
-				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetRelatedAnnouncements?id=" + announcement.getId());
+				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetRelatedAnnouncements?id=" + ann.getId());
 				conn = (HttpsURLConnection)url.openConnection();
 				conn.setRequestProperty("X-JsonRequestVerificationToken", token);
 				conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
@@ -322,7 +327,7 @@ public class Operator {
 				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" + 
 						array.getJSONObject(0).getInt("id"));
 			} else {
-				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" + announcement.getId());
+				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" + ann.getId());
 			}
 			
 			conn = (HttpsURLConnection)url.openConnection();
@@ -341,7 +346,7 @@ public class Operator {
 			in.close();
 			conn.disconnect();
 			
-			receivedData = new JSONObject(content.toString());
+			JSONObject receivedData = new JSONObject(content.toString());
 			
 			// Preuzmi PDF
 			
@@ -368,7 +373,7 @@ public class Operator {
 			}
 			
 			
-			// Clenaup
+			// Cleanup
 			for (PDDocument d:pdfPages)
 			{
 				d.close();
@@ -433,14 +438,14 @@ public class Operator {
 				if (matcher.find())
 				{
 					cpvCode = l.substring(matcher.start(), matcher.end());
-					announcement.getCpvs().add(codesMap.get(cpvCode));
+					ann.getCpvs().add(codes.get(cpvCode));
 				} else {
 					continue;
 				}
 				
 			}
 			
-			if (announcement.getCpvs().size()==0) {
+			if (ann.getCpvs().size()==0) {
 				throw new NoCPVCodesException();
 			}
 			
@@ -449,27 +454,21 @@ public class Operator {
 			{
 				text.append(row + "\n");
 			}
-			announcement.getDetails().setText(text.toString());
-			
-			em.persist(announcement.getDetails());
-			em.persist(announcement);
+			ann.getDetails().setText(text.toString());
 			
 		}
 		
-		em.getTransaction().commit();
+		return anns;
 		
-		System.out.println("Data saved.");
 
 	}
 	
 	
 	@SuppressWarnings("unchecked")
-	public static void distibuteMails() {
+	public void distibuteMails() {
 		
-		if (emf==null) {
-			emf = Persistence.createEntityManagerFactory("default");
-		}
-
+		EntityManagerFactory emf = Persistence.createEntityManagerFactory("default");
+		
 		EntityManager em = emf.createEntityManager();
 
 		em.getTransaction().begin();
@@ -565,26 +564,15 @@ public class Operator {
 
 		
 	}
-	
-	
-	public static void cleanUp() {
-		
-		if (emf!=null) {
-			emf.close();
-		}
-		
-		
-	}
-	
 
 	
 	public static void main(String[] args) {
 		
-		collectAnnouncements();
+		Operator o = new Operator();
 		
-		distibuteMails();
+		o.collectAnnouncements();
+		o.distibuteMails();
 		
-		cleanUp();
-	
 	}
+	
 }
