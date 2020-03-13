@@ -50,6 +50,8 @@ public class Operator {
 	String token = null;
 	Map<String, CPVCode> codes = null;
 	
+	List<Announcement> collectedAnnouncements = new ArrayList<Announcement>();
+	
 	public void collectAnnouncements() {
 		
 		EntityManagerFactory emf = Persistence.createEntityManagerFactory("default");
@@ -193,17 +195,10 @@ public class Operator {
 			int total = receivedData.getInt("total");
 			System.out.println("There are " + total + " announcemets.");
 			
+			collectedAnnouncements.addAll(getAnnouncementsFromJSON(receivedData));
 			
-			List<Announcement> anns = getAnnouncementsFromJSON(receivedData);
-			
-			em.getTransaction().begin();
-			for (Announcement ann:anns)
-			{
-				em.persist(ann.getDetails());
-				em.persist(ann);
-			}
-			em.getTransaction().commit();
-			
+			System.out.println("Collected " + collectedAnnouncements.size() + " announcements.");
+
 			
 			int pages;
 			pages = total / 20;
@@ -236,17 +231,23 @@ public class Operator {
 
 				receivedData = new JSONObject(content.toString());
 				
-				anns = getAnnouncementsFromJSON(receivedData);
+				collectedAnnouncements.addAll(getAnnouncementsFromJSON(receivedData));
 				
-				em.getTransaction().begin();
-				for (Announcement ann:anns)
-				{
-					em.persist(ann.getDetails());
-					em.persist(ann);
-				}
-				em.getTransaction().commit();
+				System.out.println("Collected " + collectedAnnouncements.size() + " announcements.");
 
 			}
+			
+			System.out.println("Saving announcements to database...");
+			
+			em.getTransaction().begin();
+			for (Announcement a:collectedAnnouncements)
+			{
+				em.persist(a.getDetails());
+				em.persist(a);
+			}
+			em.getTransaction().commit();
+
+			System.out.println("Data saved!");
 
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
