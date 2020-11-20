@@ -447,7 +447,7 @@ public class Operator {
 			}
 			
 			if (ann.getCpvs().size()==0) {
-				throw new NoCPVCodesException();
+				System.out.println("No CPVs in announcement no. " + ann.getNumber());
 			}
 			
 			StringBuffer text = new StringBuffer();
