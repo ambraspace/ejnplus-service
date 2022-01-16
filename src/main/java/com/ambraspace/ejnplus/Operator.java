@@ -493,7 +493,7 @@ public class Operator {
 								"(select cpvs_id from users_cpvs " +
 								"where user_id=" + user.getId() + ")) and " +
 								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +
-								"order by announcement_date DESC, id DESC",
+								"order by announcementType, announcement_date DESC, id DESC",
 								Announcement.class).getResultList();
 			} else {
 				anns = em.createNativeQuery(
@@ -505,7 +505,7 @@ public class Operator {
 								"where user_id=" + user.getId() + ")) and " +
 								"announcement_date>'" + dbDateFormat.format(lastDateInformed) + "' and " +
 								"DATEDIFF(CURRENT_DATE, announcement_date)<30 " +
-								"order by announcement_date DESC, id DESC",
+								"order by announcementType, announcement_date DESC, id DESC",
 								Announcement.class).getResultList();
 			}
 			
