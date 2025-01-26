@@ -1,6 +1,7 @@
 package com.ambraspace.ejnplus;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -284,7 +285,11 @@ public class Operator {
 			JSONObject jsonAnn = jsonData.getJSONArray("records").getJSONObject(i);
 			ann.setId(jsonAnn.getLong("id"));
 			ann.setNumber(jsonAnn.getString("number"));
-			ann.setLegalEntity(jsonAnn.getString("legalEntity"));
+			try {
+	            ann.setLegalEntity(jsonAnn.getString("legalEntity"));
+			} catch (Exception e) {
+			    ann.setLegalEntity(null);
+            }
 			ann.setAnnouncementType(jsonAnn.getString("announcementType"));
 			if (jsonAnn.get("name").getClass().equals(String.class)) {
 				ann.setName(jsonAnn.getString("name"));
@@ -348,16 +353,25 @@ public class Operator {
 			conn.disconnect();
 			
 			JSONObject receivedData = new JSONObject(content.toString());
-			
-			// Preuzmi PDF
-			
-			URL dlPDF = new URL(receivedData.getString("url").replace(".html", ".pdf"));
-			HttpsURLConnection connection = (HttpsURLConnection)dlPDF.openConnection();
-			InputStream input = connection.getInputStream();
-			PDDocument pdfDocument = PDDocument.load(input);
-			input.close();
-			connection.disconnect();
-			
+
+			PDDocument pdfDocument = null;
+
+			try
+			{
+	            // Preuzmi PDF
+
+	            URL dlPDF = new URL(receivedData.getString("url").replace(".html", ".pdf"));
+	            HttpsURLConnection connection = (HttpsURLConnection)dlPDF.openConnection();
+	            InputStream input = connection.getInputStream();
+	            pdfDocument = PDDocument.load(input);
+	            input.close();
+	            connection.disconnect();
+			} catch (FileNotFoundException e) {
+                System.out.println("FILE NOT FOUND!");
+                continue;
+            }
+
+
 			// Razdvoji stranice
 			
 			Splitter splitter = new Splitter();
