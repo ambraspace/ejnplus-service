@@ -17,13 +17,13 @@
                       value="org.mariadb.jdbc.Driver" />
 
             <property name="javax.persistence.jdbc.url"
-                      value="jdbc:mysql://localhost/ejnplus" />
+                      value="jdbc:mariadb://localhost:13306/ejnplus" />
 
             <property name="javax.persistence.jdbc.user"
-                      value="ambra" />
+                      value="ejnplus" />
 
             <property name="javax.persistence.jdbc.password"
-                      value="" />
+                      value="ejnplus" />
 
             <property name="hibernate.show_sql"
                       value="true" />

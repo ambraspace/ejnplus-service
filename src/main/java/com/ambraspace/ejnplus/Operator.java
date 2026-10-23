@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.io.StringReader;
 import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -25,7 +26,7 @@ import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
-import org.apache.pdfbox.multipdf.Splitter;
+import org.apache.pdfbox.io.MemoryUsageSetting;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.json.JSONArray;
@@ -46,21 +47,20 @@ import com.ambraspace.ejnplus.exceptions.NoCPVCodesException;
 import com.ambraspace.ejnplus.exceptions.TokenException;
 
 public class Operator {
-	
-	
+
+
 	String token = null;
 	Map<String, CPVCode> codes = null;
-	
-	List<Announcement> collectedAnnouncements = new ArrayList<Announcement>();
-	
+
+
 	public void collectAnnouncements() {
-		
+
 		EntityManagerFactory emf = Persistence.createEntityManagerFactory("default");
-		
+
 		EntityManager em = emf.createEntityManager();
-		
+
 		try {
-			
+
 			Date fromDate = em.createQuery("select max(a.date) from Announcement a", Date.class).getSingleResult();
 			if (fromDate == null)
 			{
@@ -76,24 +76,24 @@ public class Operator {
 			calTo.set(Calendar.MILLISECOND, 0);
 			calTo.add(Calendar.DATE, -1);
 			calFrom.add(Calendar.DATE, 1);
-			
+
 			if (calFrom.after(calTo)) {
 				System.out.println("Wait for a day.");
 				return;
 			}
-			
+
 
 			/*
 			 * First, get the token.
 			 */
-			
+
 			Document doc = Jsoup.connect("https://www.ejn.gov.ba/Announcement/Search").get();
 
 			Elements els = doc.getElementsByTag("script");
-			
+
 			Iterator<Element> it = els.iterator();
 			Element el = null;
-			
+
 			while (it.hasNext()) {
 				el = it.next();
 				if (el.data().matches("^var csrfToken\\s*=\\s*'\\S+';$")) {
@@ -102,45 +102,45 @@ public class Operator {
 					token = token.replaceAll("';$", "");
 				}
 			}
-			
+
 			if (token == null || token.equals("")) {
 				throw new TokenException();
 			} else {
 				System.out.println("Token received.");
 			}
-			
-			
+
+
 			/*
 			 * Prepare CPVCode's Map
 			 */
-			
+
 			codes = new HashMap<String, CPVCode>();
-			
+
 			List<CPVCode> codeList = em.createQuery("from CPVCode", CPVCode.class).getResultList();
 			for (CPVCode c:codeList)
 			{
 				codes.put(c.getId(), c);
 			}
-			
+
 			/*
 			 * Now, collect all announcement from specific date.
 			 */
-			
+
 			LocalDate dateFrom = LocalDate.of(
-					calFrom.get(Calendar.YEAR), 
+					calFrom.get(Calendar.YEAR),
 					calFrom.get(Calendar.MONTH)+1,
 					calFrom.get(Calendar.DAY_OF_MONTH));
-			
+
 			LocalDate dateTo = LocalDate.of(
-					calTo.get(Calendar.YEAR), 
+					calTo.get(Calendar.YEAR),
 					calTo.get(Calendar.MONTH)+1,
 					calTo.get(Calendar.DAY_OF_MONTH));
-			
+
 			String sDateFrom = dateFrom.toString() + "T00:00:00.000Z";
 			String sDateTo = dateTo.toString() + "T00:00:00.000Z";
 
 			JSONObject requestData = new JSONObject();
-			
+
 			requestData.put("announcementDateFrom", sDateFrom);
 			requestData.put("announcementDateTo", sDateTo);
 			requestData.put("page", 1);
@@ -168,7 +168,7 @@ public class Operator {
 			requestData.put("hasLots", JSONObject.NULL);
 			requestData.put("isJointProcurement", JSONObject.NULL);
 			requestData.put("isTdVisible", JSONObject.NULL);
-			
+
 			URL url = new URL("https://www.ejn.gov.ba/api/Announcement/Search");
 			HttpsURLConnection conn = (HttpsURLConnection)url.openConnection();
 			conn.setDoOutput(true);
@@ -179,10 +179,10 @@ public class Operator {
 			PrintStream out = new PrintStream(conn.getOutputStream());
 			out.println(requestData.toString());
 			out.close();
-			
+
 			BufferedReader in = new BufferedReader(
 					new InputStreamReader(conn.getInputStream()));
-			
+
 			StringBuffer content = new StringBuffer();
 			String line = null;
 			while ((line=in.readLine())!=null) {
@@ -195,16 +195,17 @@ public class Operator {
 
 			int total = receivedData.getInt("total");
 			System.out.println("There are " + total + " announcemets.");
-			
-			collectedAnnouncements.addAll(getAnnouncementsFromJSON(receivedData));
-			
-			System.out.println("Collected " + collectedAnnouncements.size() + " announcements.");
 
-			
+			em.getTransaction().begin();
+			int collectedCount = saveAnnouncements(em, receivedData);
+
+			System.out.println("Collected " + collectedCount + " announcements.");
+
+
 			int pages;
 			pages = total / 20;
 			if (total>(pages*20)) pages++;
-			
+
 			for (int page=2; page<=pages; page++) {
 
 				requestData.put("page", page);
@@ -218,10 +219,10 @@ public class Operator {
 				out = new PrintStream(conn.getOutputStream());
 				out.println(requestData.toString());
 				out.close();
-				
+
 				in = new BufferedReader(
 						new InputStreamReader(conn.getInputStream()));
-				
+
 				content = new StringBuffer();
 				line = null;
 				while ((line=in.readLine())!=null) {
@@ -231,21 +232,13 @@ public class Operator {
 				conn.disconnect();
 
 				receivedData = new JSONObject(content.toString());
-				
-				collectedAnnouncements.addAll(getAnnouncementsFromJSON(receivedData));
-				
-				System.out.println("Collected " + collectedAnnouncements.size() + " announcements.");
+
+				collectedCount += saveAnnouncements(em, receivedData);
+
+				System.out.println("Collected " + collectedCount + " announcements.");
 
 			}
-			
-			System.out.println("Saving announcements to database...");
-			
-			em.getTransaction().begin();
-			for (Announcement a:collectedAnnouncements)
-			{
-				em.persist(a.getDetails());
-				em.persist(a);
-			}
+
 			em.getTransaction().commit();
 
 			System.out.println("Data saved!");
@@ -266,18 +259,67 @@ public class Operator {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} finally {
-			em.close();
-			emf.close();
+			try {
+				if (em.getTransaction().isActive()) {
+					em.getTransaction().rollback();
+				}
+			} finally {
+				try {
+					em.close();
+				} finally {
+					emf.close();
+					codes = null;
+				}
+			}
 		}
 
-		
+
 	}
-	
-	
+
+
+	private int saveAnnouncements(EntityManager em, JSONObject data)
+			throws NoCPVCodesException, JSONException, ParseException, IOException {
+		List<Announcement> announcements = getAnnouncementsFromJSON(data);
+		for (Announcement announcement : announcements) {
+			em.persist(announcement.getDetails());
+			em.persist(announcement);
+		}
+		// Flush before detaching; clear alone would discard pending inserts.
+		em.flush();
+		em.clear();
+		return announcements.size();
+	}
+
+	static List<String> extractLines(PDDocument document) throws IOException {
+		List<String> lines = new ArrayList<>();
+		PDFTextStripper stripper = new PDFTextStripper();
+		stripper.setSortByPosition(true);
+		for (int page = 1; page <= document.getNumberOfPages(); page++) {
+			stripper.setStartPage(page);
+			stripper.setEndPage(page);
+			int pageStart = lines.size();
+			try (BufferedReader reader = new BufferedReader(new StringReader(stripper.getText(document)))) {
+				String line;
+				while ((line = reader.readLine()) != null) {
+					line = line.trim();
+					if (!line.isEmpty()) {
+						lines.add(line);
+					}
+				}
+			}
+			// Preserve removal of each page's footer, but do not remove a previous
+			// page's content when this page is blank.
+			if (lines.size() > pageStart) {
+				lines.remove(lines.size() - 1);
+			}
+		}
+		return lines;
+	}
+
 	private List<Announcement> getAnnouncementsFromJSON(JSONObject jsonData)
 			throws NoCPVCodesException, JSONException, ParseException, IOException
 	{
-		
+
 		List<Announcement> anns = new ArrayList<Announcement>();
 
 		for (int i=0; i<jsonData.getJSONArray("records").length(); i++) {
@@ -300,10 +342,10 @@ public class Operator {
 			ann.setDetails(new AnnouncementDetails());
 			anns.add(ann);
 		}
-		
+
 
 		for (Announcement ann:anns) {
-			
+
 			URL url = null;
 			HttpsURLConnection conn = null;
 			BufferedReader in = null;
@@ -316,10 +358,10 @@ public class Operator {
 				conn.setRequestProperty("X-JsonRequestVerificationToken", token);
 				conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
 				conn.setRequestMethod("GET");
-				
+
 				in = new BufferedReader(
 						new InputStreamReader(conn.getInputStream()));
-				
+
 				content = new StringBuffer();
 				line = null;
 				while ((line=in.readLine())!=null) {
@@ -327,23 +369,23 @@ public class Operator {
 				}
 				in.close();
 				conn.disconnect();
-				
+
 				JSONArray array = new JSONArray(content.toString());
 
-				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" + 
+				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" +
 						array.getJSONObject(0).getInt("id"));
 			} else {
 				url = new URL("https://www.ejn.gov.ba/api/Announcement/GetAnnouncementUrl?id=" + ann.getId());
 			}
-			
+
 			conn = (HttpsURLConnection)url.openConnection();
 			conn.setRequestProperty("X-JsonRequestVerificationToken", token);
 			conn.setRequestProperty("X-Requested-With", "XMLHttpRequest");
 			conn.setRequestMethod("GET");
-			
+
 			in = new BufferedReader(
 					new InputStreamReader(conn.getInputStream()));
-			
+
 			content = new StringBuffer();
 			line = null;
 			while ((line=in.readLine())!=null) {
@@ -351,74 +393,24 @@ public class Operator {
 			}
 			in.close();
 			conn.disconnect();
-			
+
 			JSONObject receivedData = new JSONObject(content.toString());
 
-			PDDocument pdfDocument = null;
-
-			try
-			{
-	            // Preuzmi PDF
-
-	            URL dlPDF = new URL(receivedData.getString("url").replace(".html", ".pdf"));
-	            HttpsURLConnection connection = (HttpsURLConnection)dlPDF.openConnection();
-	            InputStream input = connection.getInputStream();
-	            pdfDocument = PDDocument.load(input);
-	            input.close();
-	            connection.disconnect();
+			List<String> newDocTxt;
+			URL dlPDF = new URL(receivedData.getString("url").replace(".html", ".pdf"));
+			HttpsURLConnection connection = (HttpsURLConnection) dlPDF.openConnection();
+			try (InputStream input = connection.getInputStream();
+					PDDocument pdfDocument = PDDocument.load(input, MemoryUsageSetting.setupTempFileOnly())) {
+				newDocTxt = extractLines(pdfDocument);
 			} catch (FileNotFoundException e) {
-                System.out.println("FILE NOT FOUND!");
-                continue;
-            }
-
-
-			// Razdvoji stranice
-			
-			Splitter splitter = new Splitter();
-			List<PDDocument> pdfPages = splitter.split(pdfDocument);
-
-			// Pretvori u TXT svaku stranicu
-			
-			List<String> pdfPageTexts = new ArrayList<String>();
-			PDFTextStripper stripper = new PDFTextStripper();
-			stripper.setSortByPosition(true);
-			for (PDDocument pdfPage:pdfPages)
-			{
-				pdfPageTexts.add(stripper.getText(pdfPage));
+				System.out.println("FILE NOT FOUND!");
+				continue;
+			} finally {
+				connection.disconnect();
 			}
-			
-			
-			// Cleanup
-			for (PDDocument d:pdfPages)
-			{
-				d.close();
-			}
-			pdfDocument.close();
-			
-			// Izbaci prazne linije iz svakog TXT fajla
-			// i kombinuj sve TXT fajlove u jedan String
-			String[] lines = null;
-			List<String> newDocTxt = new ArrayList<String>();
-			for (String pdfPageText:pdfPageTexts)
-			{
-				pdfPageText = pdfPageText.replaceAll("\r", "\n");
-				lines = pdfPageText.split("\n");
 
-				for (String l:lines)
-				{
-					l=l.trim();
-					if (!l.equals(""))
-					{
-						newDocTxt.add(l);
-					}
-				}
-				
-				newDocTxt.remove(newDocTxt.size()-1);
-
-			}
-			
 			// Izdvoji CPV kodove
-			
+
 			int start=0, stop=newDocTxt.size()-1;
 			String l = null;
 			for (int i=0; i<newDocTxt.size(); i++)
@@ -431,7 +423,7 @@ public class Operator {
 					continue;
 				}
 			}
-			
+
 			for (int i=start; i<newDocTxt.size(); i++)
 			{
 				l=newDocTxt.get(i);
@@ -442,7 +434,7 @@ public class Operator {
 					continue;
 				}
 			}
-			
+
 			Pattern cpvPattern = Pattern.compile("\\d{8,8}-\\d{1,1}");
 			Matcher matcher = null;
 			String cpvCode = null;
@@ -457,46 +449,46 @@ public class Operator {
 				} else {
 					continue;
 				}
-				
+
 			}
-			
+
 			if (ann.getCpvs().size()==0) {
 				System.out.println("No CPVs in announcement no. " + ann.getNumber());
 			}
-			
+
 			StringBuffer text = new StringBuffer();
 			for (String row:newDocTxt)
 			{
-				text.append(row + "\n");
+				text.append(row).append('\n');
 			}
 			ann.getDetails().setText(text.toString());
-			
+
 		}
-		
+
 		return anns;
-		
+
 
 	}
-	
-	
+
+
 	@SuppressWarnings("unchecked")
 	public void distibuteMails() {
-		
+
 		EntityManagerFactory emf = Persistence.createEntityManagerFactory("default");
-		
+
 		EntityManager em = emf.createEntityManager();
 
 		em.getTransaction().begin();
-		
+
 		List<User> users = em.createQuery("from User", User.class).getResultList();
-		
+
 		for (User user:users) {
-			
+
 			Date lastDateInformed = user.getLastDateInformed();
-			
+
 			SimpleDateFormat dbDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 			SimpleDateFormat localDateFormat = new SimpleDateFormat("d.M.yyyy.");
-			
+
 			List<Announcement> anns = null;
 			if (lastDateInformed == null) {
 				anns = em.createNativeQuery(
@@ -522,12 +514,12 @@ public class Operator {
 								"order by announcementType, announcement_date DESC, id DESC",
 								Announcement.class).getResultList();
 			}
-			
+
 			if (anns.size()==0) {
 				continue;
 			}
-			
-			
+
+
 			EmailPopulatingBuilder emlBuilder = EmailBuilder.startingBlank()
 					.to(user.getName() + " " + user.getSurname(), user.getEmail())
 					.withSubject("EJNplus - nova obavještenja")
@@ -549,45 +541,45 @@ public class Operator {
 				if (lastDateInformed==null || an.getDate().after(lastDateInformed)) {
 					lastDateInformed = an.getDate();
 				}
-				emlBuilder.appendTextHTML("<tr>" + 
+				emlBuilder.appendTextHTML("<tr>" +
 						"<td>" + localDateFormat.format(an.getDate()) + "</td>" +
 						"<td>" + an.getLegalEntity() + "</td>" +
 						"<td>" + an.getName() + "</td>" +
 						"<td>" + an.getAnnouncementType() + "</td>" +
 						"<td><a href=\"https://ejnplus.avantous.com/getdoc.php?type=announcement&id=" + an.getId() + "\">" + an.getNumber() + "</a></td></tr>");
 			}
-			
+
 			emlBuilder.appendTextHTML("</table>");
 			Email eml = emlBuilder.buildEmail();
-			
+
 			Mailer mailer = MailerBuilder
 					.withSMTPServer("localhost", 25)
 					.withTransportStrategy(TransportStrategy.SMTP)
 					.buildMailer();
-			
+
 			mailer.sendMail(eml);
-			
+
 			user.setLastDateInformed(lastDateInformed);
-			
+
 		}
 
-		
-		
+
+
 		em.getTransaction().commit();
-		
+
 		em.close();
 
-		
+
 	}
 
-	
+
 	public static void main(String[] args) {
-		
+
 		Operator o = new Operator();
-		
+
 		o.collectAnnouncements();
 		o.distibuteMails();
-		
+
 	}
-	
+
 }
